@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+dist/
+.env
+*.db
+my_vector_db/
+.idea/
+.vscode/
+.DS_Store
+*.log
