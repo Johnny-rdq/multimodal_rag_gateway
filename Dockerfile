@@ -4,13 +4,13 @@
 # 运行时平台：Railway / Render 或本地 Docker
 # 基础镜像：Python 3.11-slim（兼容 ChromaDB + PaddleOCR）
 
-FROM python:3.11-slim
+FROM python:3.12-slim-bookworm
 
 # ---- 系统依赖 ----
-# libgl1-mesa-glx：OpenCV/Pillow 依赖
+# libgl1：OpenCV/Pillow 依赖（Bookworm 起改名）
 # libgomp1：ChromaDB / sentence-transformers 依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
