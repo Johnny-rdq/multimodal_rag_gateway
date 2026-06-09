@@ -74,5 +74,8 @@ async def read_index():
 
 
 if __name__ == "__main__":
-    # 本地开发时 reload=True 会启动两次，上线时去掉即可
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8001, reload=True)
+    # 本地开发时使用 127.0.0.1:8001；Docker 部署时通过环境变量覆盖
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8001"))
+    reload = os.getenv("RELOAD", "true").lower() == "true"
+    uvicorn.run("app.main:app", host=host, port=port, reload=reload)
