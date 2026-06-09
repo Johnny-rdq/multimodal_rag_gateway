@@ -1,132 +1,382 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>多模态 RAG</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-.md-content p { margin-bottom:0.5em; line-height:1.7; }
-.md-content pre { background:#1e293b; color:#e2e8f0; padding:1rem; border-radius:.5rem; }
-img.uploaded { max-width:200px; max-height:200px; border-radius:.5rem; border:2px solid #6366f1; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus AI | 多模态智能引擎</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .typing-cursor::after { content: '▋'; animation: blink 1s step-start infinite; color: #4B5563; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .msg-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body class="h-screen flex flex-col bg-gray-100">
+<body class="bg-white h-screen flex overflow-hidden font-sans text-gray-800">
 
-<div class="bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
-  <h1 class="text-lg font-bold">🖼 多模态 RAG</h1>
-  <label class="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
-    📷 上传图片
-    <input type="file" id="file-input" accept="image/*" class="hidden" onchange="uploadImage()">
-  </label>
-</div>
+    <div class="w-64 bg-[#1e1e2e] text-gray-300 flex flex-col shrink-0">
+        <div class="p-5 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg">N</div>
+            <h1 class="text-lg font-semibold tracking-wide text-white">Nexus AI</h1>
+        </div>
+        <div class="px-3 pb-2">
+            <button onclick="createNewSession()" class="w-full flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-sm transition-colors text-white font-medium">
+                <i class="fas fa-pen-to-square text-xs"></i> 新的对话
+            </button>
+        </div>
+        <div id="sessionList" class="flex-1 overflow-y-auto no-scrollbar p-3 space-y-1">
+            <div class="px-3 py-2 text-xs text-gray-500 text-center mt-5"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
+        </div>
+    </div>
 
-<div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4">
-  <div class="text-center text-gray-400 mt-20">
-    <div class="text-5xl mb-4">🖼️</div>
-    <p>上传一张图片，然后提问</p>
-  </div>
-</div>
+    <div class="flex-1 flex flex-col h-screen relative bg-white">
+        <header class="h-14 shrink-0 flex items-center px-6 justify-between z-10">
+            <h2 class="text-sm font-medium text-gray-500" id="currentSessionTitle">当前会话：新对话</h2>
+        </header>
 
-<div class="p-4 bg-white border-t">
-  <div class="max-w-3xl mx-auto flex gap-2">
-    <textarea id="user-input" class="flex-1 border rounded-xl px-4 py-3 resize-none focus:ring-2 focus:ring-indigo-400 outline-none" rows="1" placeholder="对图片提问...（Enter 发送）" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
-    <button onclick="sendMessage()" id="send-btn" class="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:bg-gray-300" disabled>发送</button>
-  </div>
-</div>
+        <main id="chatBox" class="flex-1 overflow-y-auto p-4 md:px-12 md:py-6 scroll-smooth">
+            <div class="max-w-3xl mx-auto space-y-8" id="messageContainer">
+                <div class="flex gap-4 msg-enter">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0"><i class="fas fa-robot text-sm"></i></div>
+                    <div class="mt-1 text-gray-800 leading-relaxed">
+                        你好！我是 Nexus AI。我支持处理图片、PDF、Word 甚至 TXT 文档了！
+                    </div>
+                </div>
+            </div>
+            <div id="chatAnchor" class="h-4"></div>
+        </main>
 
-<script>
-let currentImagePath = '';
-let isLoading = false;
-const chatBox = document.getElementById('chat-box');
-const input = document.getElementById('user-input');
-const sendBtn = document.getElementById('send-btn');
+        <div class="shrink-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-2 pb-6 px-4 md:px-8">
+            <div class="max-w-3xl mx-auto relative">
 
-input.addEventListener('input', () => { sendBtn.disabled = !input.value.trim() || isLoading; });
+                <div id="filePreview" class="hidden absolute -top-12 left-4 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm flex items-center gap-2 text-sm msg-enter z-20">
+                    <div class="w-6 h-6 rounded bg-indigo-50 text-indigo-500 flex items-center justify-center"><i class="fas fa-file-alt text-xs"></i></div>
+                    <span id="fileName" class="text-gray-600 truncate max-w-[150px] font-medium"></span>
+                    <button onclick="clearFile()" class="text-gray-400 hover:text-red-500 ml-1"><i class="fas fa-times-circle"></i></button>
+                </div>
 
-function appendMessage(role, text, imageSrc) {
-    if (chatBox.querySelector('.text-center')) chatBox.innerHTML = '';
-    const div = document.createElement('div');
-    div.className = `flex ${role==='user'?'justify-end':'justify-start'}`;
-    let html = '';
-    if (role === 'user') {
-        html = `<div class="max-w-[75%] bg-indigo-600 text-white px-4 py-3 rounded-2xl rounded-tr-none shadow"><div class="whitespace-pre-wrap">${escHtml(text)}</div></div>`;
-        if (imageSrc) html = `<img src="${imageSrc}" class="uploaded mb-2">` + html;
-    } else {
-        html = `<div class="max-w-[85%] bg-white px-5 py-3 rounded-2xl rounded-tl-none shadow border"><div class="md-content">${marked.parse(text)}</div></div>`;
-    }
-    div.innerHTML = html;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
+                <div class="bg-[#f4f4f5] hover:bg-[#e4e4e7] focus-within:bg-[#f4f4f5] focus-within:ring-2 ring-gray-200 rounded-[24px] p-1.5 flex items-end transition-all duration-200">
+                    <input type="file" id="fileInput" accept="image/*, .pdf, .txt, .docx" class="hidden" onchange="handleFileUpload(event)">
+                    <button onclick="document.getElementById('fileInput').click()" class="p-2 ml-1 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-200 transition-colors shrink-0" title="上传附件">
+                        <i class="fas fa-paperclip text-lg"></i>
+                    </button>
 
-function appendAssistantBubble() {
-    if (chatBox.querySelector('.text-center')) chatBox.innerHTML = '';
-    const div = document.createElement('div');
-    div.className = 'flex justify-start';
-    div.innerHTML = `<div class="max-w-[85%] bg-white px-5 py-3 rounded-2xl rounded-tl-none shadow border"><div class="md-content"><span class="text-gray-400">思考中...</span></div></div>`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-    return div.querySelector('.md-content');
-}
+                    <textarea id="userInput" rows="1" placeholder="发送消息给 Nexus..." class="w-full max-h-40 px-3 py-2.5 bg-transparent border-none focus:ring-0 resize-none text-gray-800 placeholder-gray-500 leading-relaxed no-scrollbar" oninput="this.style.height = '';this.style.height = this.scrollHeight + 'px'"></textarea>
 
-async function uploadImage() {
-    const file = document.getElementById('file-input').files[0];
-    if (!file) return;
-    const formData = new FormData(); formData.append('file', file);
-    appendMessage('user', '上传了图片：' + file.name, URL.createObjectURL(file));
-    try {
-        const res = await fetch('/api/upload', { method:'POST', body:formData });
-        const data = await res.json();
-        currentImagePath = data.image_path;
-        appendMessage('assistant', '✅ 图片已上传，请对图片提问');
-    } catch(e) {
-        appendMessage('assistant', '⚠️ 上传失败: ' + e.message);
-    }
-}
+                    <button id="sendBtn" onclick="sendMessage()" class="mb-0.5 mr-0.5 w-9 h-9 flex items-center justify-center bg-gray-900 hover:bg-black text-white rounded-full transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <i class="fas fa-arrow-up text-sm"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-async function sendMessage() {
-    const query = input.value.trim();
-    if (!query || isLoading) return;
-    isLoading = true; sendBtn.disabled = true;
-    appendMessage('user', query);
-    input.value = '';
-    const contentDiv = appendAssistantBubble();
+    <script>
+        let currentSessionId = 'sess_' + Math.random().toString(36).substring(2, 10);
+        let currentImagePath = '';
+        let currentLocalFileName = '';
+        // 👇 新增：用来存本地瞬间生成的图片预览链接
+        let currentLocalFileUrl = '';
+        let isGenerating = false;
 
-    try {
-        const res = await fetch('/api/chat', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ query, session_id:'default', image_path: currentImagePath })
-        });
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let text = '', buffer = '';
-        while (true) {
-            const {done, value} = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, {stream:true});
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                if (line.startsWith('data: [SOURCE]:')) continue;
-                if (line.startsWith('data: [STATUS]:') || line.startsWith('data: [THINKING]:')) {
-                    contentDiv.innerHTML = '<span class="text-gray-400">' + escHtml(line.substring(16)) + '</span>';
-                } else if (line.startsWith('data: ')) {
-                    text += line.substring(6);
-                    contentDiv.innerHTML = marked.parse(text);
+        window.onload = loadSessions;
+
+        function scrollToBottom() {
+            document.getElementById('chatAnchor').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function loadSessions() {
+            const listDiv = document.getElementById('sessionList');
+            try {
+                const res = await fetch('/api/sessions');
+                const data = await res.json();
+                listDiv.innerHTML = '';
+                if (data.sessions.length === 0) {
+                    listDiv.innerHTML = '<div class="px-3 py-2 text-xs text-gray-500 text-center mt-5">暂无历史记录</div>';
+                    return;
                 }
+                data.sessions.forEach(s => {
+                    const isActive = s.id === currentSessionId ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-gray-400';
+                    listDiv.innerHTML += `
+                        <div class="group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer text-sm ${isActive} transition-colors" onclick="switchSession('${s.id}', '${s.title}')">
+                            <div class="truncate flex-1">${s.title}</div>
+                            <button onclick="deleteSession(event, '${s.id}')" class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                listDiv.innerHTML = '<div class="text-xs text-red-500 text-center">加载失败</div>';
             }
         }
-    } catch(e) {
-        contentDiv.innerHTML = '<span class="text-red-500">⚠️ 连接失败: ' + escHtml(e.message) + '</span>';
-    }
-    isLoading = false; sendBtn.disabled = !input.value.trim();
-}
 
-function escHtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
-</script>
+        async function switchSession(id, title) {
+            if(isGenerating) return;
+            currentSessionId = id;
+            document.getElementById('currentSessionTitle').innerText = '当前会话：' + title;
+            document.getElementById('messageContainer').innerHTML = '';
+            loadSessions();
+
+            try {
+                const res = await fetch(`/api/sessions/${id}`);
+                const data = await res.json();
+                data.history.forEach(msg => {
+                    let originName = msg.image_path ? msg.image_path.split(/[/\\]/).pop() : '';
+                    appendMessage(msg.role, msg.content, msg.image_path, originName, msg.context, '');
+                });
+                scrollToBottom();
+            } catch (err) { }
+        }
+
+        async function deleteSession(event, id) {
+            event.stopPropagation();
+            if(confirm("确定删除这条对话？")) {
+                await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+                if(currentSessionId === id) createNewSession();
+                loadSessions();
+            }
+        }
+
+        function createNewSession() {
+            if(isGenerating) return;
+            currentSessionId = 'sess_' + Math.random().toString(36).substring(2, 10);
+            document.getElementById('currentSessionTitle').innerText = '当前会话：新对话';
+            document.getElementById('messageContainer').innerHTML = `
+                <div class="flex gap-4 msg-enter">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0"><i class="fas fa-robot text-sm"></i></div>
+                    <div class="mt-1 text-gray-800 leading-relaxed">
+                        你好！我是 Nexus AI。我支持处理图片、PDF、Word 甚至 TXT 文档了！
+                    </div>
+                </div>
+            `;
+            clearFile();
+            loadSessions();
+        }
+
+        document.getElementById('userInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            currentLocalFileName = file.name;
+            // 👇 核心修复 1：在浏览器本地瞬间生成一个免网络请求的预览链接！
+            currentLocalFileUrl = URL.createObjectURL(file);
+
+            document.getElementById('filePreview').classList.remove('hidden');
+            document.getElementById('fileName').innerText = file.name;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.file_path) currentImagePath = data.file_path;
+            } catch (err) {
+                document.getElementById('fileName').innerText = "上传失败";
+            }
+        }
+
+        function clearFile() {
+            currentImagePath = '';
+            currentLocalFileName = '';
+            currentLocalFileUrl = ''; // 同步清空
+            document.getElementById('fileInput').value = '';
+            document.getElementById('filePreview').classList.add('hidden');
+        }
+
+        String.prototype.endswith = function(suffix) {
+            return this.indexOf(suffix, this.length - suffix.length) !== -1;
+        };
+
+        // 👇 增加 localPreviewUrl 参数
+        function appendMessage(role, text, filePath = '', customFileName = '', contextText = '', localPreviewUrl = '') {
+            const container = document.getElementById('messageContainer');
+            const div = document.createElement('div');
+
+            div.className = "flex gap-3 w-full msg-enter " + (role === 'user' ? "flex-row-reverse" : "");
+
+            const avatar = role === 'user'
+                ? `<div class="w-7 h-7 rounded-full bg-[#ececf1] flex items-center justify-center text-gray-600 shrink-0"><i class="fas fa-user text-[12px]"></i></div>`
+                : `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0"><i class="fas fa-robot text-[12px]"></i></div>`;
+
+            const bubbleClasses = role === 'user'
+                ? "bg-[#f4f4f5] text-gray-800 px-4 py-2 rounded-[16px] rounded-tr-[4px]"
+                : "text-gray-800 leading-relaxed pt-0.5";
+
+            let attachmentHtml = '';
+            // 如果有服务端路径，或者有本地预览链接，都要渲染附件卡片
+            if (filePath || localPreviewUrl) {
+                // 解决 Windows 下反斜杠导致的图片加载失败问题
+                const formattedPath = filePath ? filePath.replace(/\\/g, '/') : '';
+                const fpLower = formattedPath.toLowerCase() || (currentLocalFileName ? currentLocalFileName.toLowerCase() : '');
+                const displayName = customFileName || formattedPath.split('/').pop();
+                const isDocument = fpLower.endswith('.pdf') || fpLower.endswith('.txt') || fpLower.endswith('.docx');
+
+                if (isDocument) {
+                    let iconHtml = '<i class="fas fa-file-alt text-base"></i>';
+                    let bgClass = 'bg-gray-100 text-gray-600';
+                    if (fpLower.endswith('.pdf')) {
+                        iconHtml = '<i class="fas fa-file-pdf text-base"></i>';
+                        bgClass = 'bg-red-50 text-red-500';
+                    } else if (fpLower.endswith('.docx')) {
+                        iconHtml = '<i class="fas fa-file-word text-base"></i>';
+                        bgClass = 'bg-blue-50 text-blue-500';
+                    } else if (fpLower.endswith('.txt')) {
+                        iconHtml = '<i class="fas fa-file-code text-base"></i>';
+                        bgClass = 'bg-gray-100 text-gray-700';
+                    }
+
+                    attachmentHtml = `
+                        <div class="mb-1.5 max-w-sm rounded-lg border border-gray-200 bg-white px-3 py-2 flex items-center gap-2 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors" onclick="if('${formattedPath}') window.open('/${formattedPath}')">
+                            <div class="w-7 h-7 rounded bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0">${iconHtml}</div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-[11px] font-semibold text-gray-700 truncate">${displayName}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 👇 核心修复 2：图片优先使用本地预览链接，绕过服务器阻塞！没有再用服务器路径
+                    const imgSrc = localPreviewUrl ? localPreviewUrl : '/' + formattedPath;
+                    attachmentHtml = `
+                        <div class="mb-1.5 max-w-xs rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white p-1 inline-block">
+                            <img src="${imgSrc}" class="max-h-40 object-cover rounded-lg cursor-zoom-in hover:opacity-90 transition-opacity" onclick="window.open(this.src)" alt="用户附件">
+                        </div>
+                    `;
+                }
+            }
+
+            let cleanText = text || '';
+            let sourceHtml = '';
+
+            if (cleanText.includes('[SOURCE]:')) {
+                let parts = cleanText.split('[SOURCE]:');
+                cleanText = parts[0].trim();
+                if (!contextText) contextText = parts[1].trim();
+            }
+
+            if (contextText && role === 'assistant') {
+                sourceHtml = `
+                    <div class="mt-1 block">
+                        <div class="text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-100 inline-block">
+                            <i class="fas fa-link mr-1"></i> ${contextText}
+                        </div>
+                    </div>
+                `;
+            }
+
+            const isTxtHidden = (role === 'user' && !cleanText) ? 'hidden' : '';
+
+            div.innerHTML = `
+                ${avatar}
+                <div class="flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} flex-1 min-w-0">
+                    ${attachmentHtml}
+                    <div class="${bubbleClasses} ${isTxtHidden} whitespace-pre-wrap break-words inline-block w-fit content-box">${cleanText}${sourceHtml}</div>
+                </div>
+            `;
+            container.appendChild(div);
+            scrollToBottom();
+            return div.querySelector('.content-box');
+        }
+
+        async function sendMessage() {
+            const inputEle = document.getElementById('userInput');
+            const query = inputEle.value.trim();
+            if ((!query && !currentImagePath) || isGenerating) return;
+
+            isGenerating = true;
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin text-sm"></i>';
+
+            const fileToSend = currentImagePath;
+            const nameToSend = currentLocalFileName;
+            const urlToSend = currentLocalFileUrl; // 拿到本地预览URL
+
+            // 👇 传入 urlToSend 实现秒渲染！
+            if (query || fileToSend) appendMessage('user', query, fileToSend, nameToSend, '', urlToSend);
+
+            inputEle.value = '';
+            inputEle.style.height = 'auto';
+            clearFile();
+
+            let replyBox = appendMessage('assistant', '');
+            if (replyBox) replyBox.classList.add('typing-cursor');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query || "请分析附件内容", session_id: currentSessionId, image_path: fileToSend })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+
+                let buffer = '';
+                let hasStartedText = false;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (value) buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    if (!done) buffer = lines.pop(); else buffer = '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            let text = line.substring(6);
+                            if (text.trim() === '[DONE]') continue;
+
+                            if (text.includes('[STATUS]:') || text.includes('[THINKING]:')) {
+                                if (!hasStartedText && replyBox) {
+                                    let statusMsg = text.replace('[STATUS]:', '').replace('[THINKING]:', '').trim();
+                                    replyBox.innerHTML = `<span class="text-[11px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full inline-block border border-indigo-100"><i class="fas fa-circle-notch fa-spin mr-1"></i> ${statusMsg}</span>`;
+                                    scrollToBottom();
+                                }
+                                continue;
+                            }
+
+                            if (text.includes('[SOURCE]:')) {
+                                let sourceMsg = text.replace('[SOURCE]:', '').trim();
+                                if(replyBox) {
+                                    replyBox.innerHTML += `<div class="mt-1 block"><div class="text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded border inline-block"><i class="fas fa-link mr-1"></i> ${sourceMsg}</div></div>`;
+                                    scrollToBottom();
+                                }
+                                continue;
+                            }
+
+                            if (!hasStartedText && replyBox) {
+                                replyBox.innerHTML = '';
+                                hasStartedText = true;
+                            }
+                            if(replyBox) {
+                                replyBox.innerHTML += text;
+                                scrollToBottom();
+                            }
+                        }
+                    }
+                    if (done) break;
+                }
+                loadSessions();
+            } catch (err) {
+                console.error(err);
+                if(replyBox) replyBox.innerHTML += "\n[请求失败，请检查后端运行状态]";
+            } finally {
+                if(replyBox) replyBox.classList.remove('typing-cursor');
+                isGenerating = false;
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-arrow-up text-sm"></i>';
+            }
+        }
+    </script>
 </body>
 </html>

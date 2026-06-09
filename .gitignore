@@ -10,3 +10,5 @@ my_vector_db/
 .vscode/
 .DS_Store
 *.log
+uploads/
+app/uploads/
